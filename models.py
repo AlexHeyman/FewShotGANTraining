@@ -63,7 +63,8 @@ class Generator(nn.Module):
         self.upsampler_128 = Upsampler(64, 32)
         self.upsampler_256 = Upsampler(32, 3)
         self.upsampler_512 = Upsampler(3, 3)
-        self.conv = nn.Conv2d(3, 3, kernel_size=3, stride=1, padding=1)
+        self.conv = nn.Conv2d(32 if output_resolution == 256 else 3, 3,
+                              kernel_size=3, stride=1, padding=1)
         self.nonlinear = nn.Tanh()
         if use_skips:
             self.skip_8_128 = SkipLayerExcitation(64, 512)
@@ -103,10 +104,10 @@ class SimpleDecoder(nn.Module):
 
     def __init__(self, in_channels):
         super().__init__()
-        self.upsampler1 = Upsampler(in_channels, 128)
-        self.upsampler2 = Upsampler(128, 64)
-        self.upsampler3 = Upsampler(64, 32)
-        self.upsampler4 = Upsampler(32, 3)
+        self.upsampler1 = Upsampler(in_channels, 256)
+        self.upsampler2 = Upsampler(256, 128)
+        self.upsampler3 = Upsampler(128, 128)
+        self.upsampler4 = Upsampler(128, 3)
 
     def forward(self, x):
         x = self.upsampler1(x)
@@ -148,26 +149,32 @@ class Discriminator(nn.Module):
         super().__init__()
         self.use_decoders = use_decoders
         self.input_resolution = input_resolution
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=4, stride=2, padding=1)
+        
+        early_conv_filters = (8 if input_resolution == 256 else 32)
+        early_conv_stride = (1 if input_resolution == 256 else 2)
+        self.conv1 = nn.Conv2d(3, early_conv_filters, kernel_size=4,
+                               stride=early_conv_stride, padding='same')
         self.nonlinear1 = nn.LeakyReLU(negative_slope=0.1)
-        self.conv2 = nn.Conv2d(32, 32, kernel_size=4, stride=2, padding=1)
+        self.conv2 = nn.Conv2d(early_conv_filters, early_conv_filters,
+                               kernel_size=4, stride=early_conv_stride,
+                               padding='same')
         self.batchnorm2 = nn.BatchNorm2d(32)
         self.nonlinear2 = nn.LeakyReLU(negative_slope=0.1)
         
         self.downsampler_256 = ResidualDownsampler(32, 64)
         self.downsampler_128 = ResidualDownsampler(64, 128)
-        self.downsampler_64 = ResidualDownsampler(128, 256)
-        self.downsampler_32 = ResidualDownsampler(256, 256)
-        self.downsampler_16 = ResidualDownsampler(256, 256)
+        self.downsampler_64 = ResidualDownsampler(128, 128)
+        self.downsampler_32 = ResidualDownsampler(128, 256)
+        self.downsampler_16 = ResidualDownsampler(256, 512)
 
-        self.conv3 = nn.Conv2d(256, 256, kernel_size=1, stride=1, padding=0)
+        self.conv3 = nn.Conv2d(512, 256, kernel_size=1, stride=1, padding=0)
         self.batchnorm3 = nn.BatchNorm2d(256)
         self.nonlinear3 = nn.LeakyReLU(negative_slope=0.1)
-        self.conv4 = nn.Conv2d(256, 256, kernel_size=4, stride=1, padding=0)
+        self.conv4 = nn.Conv2d(256, 1, kernel_size=4, stride=1, padding=0)
 
         if use_decoders:
-            self.decoder1 = SimpleDecoder()
-            self.decoder2 = SimpleDecoder()
+            self.decoder1 = SimpleDecoder(256)
+            self.decoder2 = SimpleDecoder(512)
 
     def forward(self, x):
         x1 = self.nonlinear1(self.conv1(x))
