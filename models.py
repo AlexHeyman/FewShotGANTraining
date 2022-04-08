@@ -2,6 +2,7 @@
 Implements the models in the paper's experiments as PyTorch Modules.
 """
 
+from random import randint
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -47,7 +48,7 @@ class Upsampler(nn.Module):
 class Generator(nn.Module):
 
     def __init__(self, use_skips, output_resolution):
-        # output_resolution is assumed to be either 256 or 1024
+        # output_resolution should be either 256 or 1024
         super().__init__()
         self.use_skips = use_skips
         self.output_resolution = output_resolution
@@ -145,7 +146,7 @@ class ResidualDownsampler(nn.Module):
 class Discriminator(nn.Module):
 
     def __init__(self, use_decoders, input_resolution):
-        # input_resolution is assumed to be either 256 or 1024
+        # input_resolution should be either 256 or 1024
         super().__init__()
         self.use_decoders = use_decoders
         self.input_resolution = input_resolution
@@ -176,7 +177,8 @@ class Discriminator(nn.Module):
             self.decoder1 = SimpleDecoder(256)
             self.decoder2 = SimpleDecoder(512)
 
-    def forward(self, x):
+    def forward(self, x, label):
+        # label should be either 0 (fake) or 1 (real)
         x1 = self.nonlinear1(self.conv1(x))
         x_256 = self.nonlinear2(self.batchnorm2(self.conv2(x1)))
         
@@ -189,13 +191,26 @@ class Discriminator(nn.Module):
         x_penultimate = self.nonlinear3(self.batchnorm3(self.conv3(x_8)))
         logits = self.conv4(x_penultimate)
         
-        if self.use_decoders:
-            I = F.interpolate(x, scale_factor=0.5, mode='bilinear')
+        if self.use_decoders and label == 1:
+            
+            I = F.interpolate(x, size=(128, 128), mode='bilinear')
 
-            ##### Change later once I figure out how the cropping works
-            I_part = F.interpolate(x, size=(128, 128), mode='bilinear')
-            x_16_part = F.interpolate(x_16, size=(8, 8), mode='bilinear')
-            #####
+            # Random cropping
+            if self.input_resolution != 256:
+                x = F.interpolate(x, size=(256, 256), mode='bilinear')
+            crop_area = randint(0, 3)
+            if crop_area == 0: # Top left
+                I_part = x[:, :, :128, :128]
+                x_16_part = x_16[:, :, :8, :8]
+            elif crop_area == 1: # Bottom left
+                I_part = x[:, :, 128:, :128]
+                x_16_part = x_16[:, :, 8:, :8]
+            elif crop_area == 2: # Top right
+                I_part = x[:, :, :128, 128:]
+                x_16_part = x_16[:, :, :8, 8:]
+            else: # Bottom right
+                I_part = x[:, :, 128:, 128:]
+                x_16_part = x_16[:, :, 8:, 8:]
 
             I_prime = self.decoder2(x_8)
             I_part_prime = self.decoder1(x_16)
