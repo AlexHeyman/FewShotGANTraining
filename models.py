@@ -9,6 +9,10 @@ import torch.nn.functional as F
 
 
 class SkipLayerExcitation(nn.Module):
+    """
+    The "skip-layer excitation module" used by the Generator to create skip
+    connections between layers.
+    """
 
     def __init__(self, in_channels_1, in_channels_2):
         super().__init__()
@@ -21,6 +25,9 @@ class SkipLayerExcitation(nn.Module):
         self.nonlinear2 = nn.Sigmoid()
 
     def forward(self, x1, x2):
+        # x1 must have shape ([batch_size], in_channels_1, [height1], [width1])
+        # x2 must have shape ([batch_size], in_channels_2, [height2], [width2])
+        # output has shape ([batch_size], in_channels_1, [height1], [width1])
         x2 = self.pooling(x2)
         x2 = self.nonlinear1(self.conv1(x2))
         x2 = self.nonlinear2(self.conv2(x2))
@@ -28,6 +35,9 @@ class SkipLayerExcitation(nn.Module):
 
 
 class Upsampler(nn.Module):
+    """
+    An up-sampling layer used by both the Generator and the SimpleDecoder.
+    """
 
     def __init__(self, in_channels, out_channels):
         super().__init__()
@@ -38,6 +48,8 @@ class Upsampler(nn.Module):
         self.glu = nn.GLU() # cuts number of channels in half
 
     def forward(self, x):
+        # x must have shape ([batch_size], in_channels, [height], [width])
+        # output has shape ([batch_size], out_channels, [height]*2, [width]*2)
         x = self.upsample(x)
         x = self.conv(x)
         x = self.batchnorm(x)
@@ -46,6 +58,9 @@ class Upsampler(nn.Module):
 
 
 class Generator(nn.Module):
+    """
+    The GAN's generator.
+    """
 
     def __init__(self, use_skips, output_resolution):
         # output_resolution should be either 256 or 1024
@@ -73,6 +88,9 @@ class Generator(nn.Module):
             self.skip_32_512 = SkipLayerExcitation(3, 128)
 
     def forward(self, x):
+        # x is a set of random noise vectors with shape ([batch_size], 256)
+        # output is a set of images with shape
+        # ([batch_size], 3, output_resolution, output_resolution)
         x_4 = self.glu(self.batchnorm(self.conv_transpose(x)))
         x_8 = self.upsampler_4(x_4)
         x_16 = self.upsampler_8(x_8)
@@ -102,6 +120,9 @@ class Generator(nn.Module):
 
 
 class SimpleDecoder(nn.Module):
+    """
+    A decoder used to help train the Discriminator.
+    """
 
     def __init__(self, in_channels):
         super().__init__()
@@ -111,6 +132,8 @@ class SimpleDecoder(nn.Module):
         self.upsampler4 = Upsampler(128, 3)
 
     def forward(self, x):
+        # x must be of shape ([batch_size], in_channels, [height], [width])
+        # output is of shape ([batch_size], 3, [height] * 16, [width] * 16)
         x = self.upsampler1(x)
         x = self.upsampler2(x)
         x = self.upsampler3(x)
@@ -119,6 +142,9 @@ class SimpleDecoder(nn.Module):
 
 
 class ResidualDownsampler(nn.Module):
+    """
+    A down-sampling structure used by the Discriminator.
+    """
 
     def __init__(self, in_channels, out_channels):
         super().__init__()
@@ -137,6 +163,8 @@ class ResidualDownsampler(nn.Module):
         self.nonlinear3 = nn.LeakyReLU(negative_slope=0.1)
 
     def forward(self, x):
+        # x must have shape ([batch_size], in_channels, [height], [width])
+        # output has shape ([batch_size], out_channels, [height/2], [width/2])
         x1 = self.nonlinear1(self.batchnorm1(self.conv1(x)))
         x2 = self.nonlinear2(self.batchnorm2(self.conv2(x)))
         x3 = self.nonlinear3(self.batchnorm3(self.conv3(x2)))
@@ -144,6 +172,9 @@ class ResidualDownsampler(nn.Module):
 
 
 class Discriminator(nn.Module):
+    """
+    The GAN's discriminator.
+    """
 
     def __init__(self, use_decoders, input_resolution):
         # input_resolution should be either 256 or 1024
@@ -178,7 +209,10 @@ class Discriminator(nn.Module):
             self.decoder2 = SimpleDecoder(512)
 
     def forward(self, x, label):
+        # x must be a set of images with shape
+        # ([batch_size], 3, input_resolution, input_resolution)
         # label should be either 0 (fake) or 1 (real)
+        # output is a set of real/fake logits with shape ([batch_size], 5, 5)
         x1 = self.nonlinear1(self.conv1(x))
         x_256 = self.nonlinear2(self.batchnorm2(self.conv2(x1)))
         
