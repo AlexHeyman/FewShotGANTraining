@@ -40,20 +40,26 @@ transform = transforms.Compose([
 ])
 
 eval_set = ImageFolderDataset(root=dataset_folder, transform=transform)
-eval_loader = DataLoader(eval_set, batch_size=len(eval_set), shuffle=False,
-                         num_workers=4, pin_memory=True)
-eval_images = next(iter(eval_loader))
+eval_loader = DataLoader(eval_set, batch_size=1, shuffle=False)
+eval_images = torch.concat([image for image in eval_loader], dim=0)
 
 
-# This noise vector will be used on each GAN to generate a set of images to be
+# This noise tensor will be used on each GAN to generate a set of images to be
 # compared against the original dataset
-noise = torch.Tensor(images_to_generate, 256).normal_(0, 1).to(self.device)
+noise = torch.Tensor(images_to_generate, 256).normal_(0, 1).to(device)
+
+# Create a view of the noise tensor as a list of row vectors so they can be
+# fed into a GAN's generator one at a time, prevening out-of-memory errors
+noise_segments = [torch.reshape(noise[i], (1, 256))
+                  for i in range(images_to_generate)]
 
 
 def evaluate(ts):
     ts.load_checkpoint(directory_path=checkpoints_folder,
-                       filename='%s_%d.pt' % (ts.name, iteration_to_eval))
-    fake_images = self.generator(noise)
+                       filename=('%s_%d.pt' % (ts.name, iteration_to_eval)))
+    
+    fake_images = torch.concat([ts.generator(noise_segments[i])
+                                for i in range(images_to_generate)], dim=0)
 
     # Calculate FID between generated images and original dataset
     fid = FID(fake_images, eval_images)
@@ -64,24 +70,24 @@ def evaluate(ts):
     images_to_plot = images_to_plot / 2 + 0.5 # Unnormalize
     plt.imshow(np.transpose(images_to_plot.numpy(), (1, 2, 0)),
                nrow=5, padding=10)
-    plt.savefig(path.join(output_folder, ('%s.png' % ts.name)))
+    plt.savefig(path.join(output_folder, ('samples_%s.png' % ts.name)))
 
 
 # Evaluate Skip + Decode
 evaluate(GANTrainingSystem(
-    'skipdecode', True, True, resolution, trainloader, device))
+    'skipdecode', True, True, resolution, eval_loader, device))
 
 
 # Evaluate Skip alone
 evaluate(GANTrainingSystem(
-    'skip', True, False, resolution, trainloader, device))
+    'skip', True, False, resolution, eval_loader, device))
 
 
 # Evaluate Decode alone
 evaluate(GANTrainingSystem(
-    'decode', False, True, resolution, trainloader, device))
+    'decode', False, True, resolution, eval_loader, device))
 
 
 # Evaluate baseline model
 evaluate(GANTrainingSystem(
-    'baseline', False, False, resolution, trainloader, device))
+    'baseline', False, False, resolution, eval_loader, device))
