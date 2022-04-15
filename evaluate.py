@@ -22,6 +22,7 @@ iteration_to_eval = 50000
 images_to_generate = 5000
 dataset_folder = './images/AnimalFace-dog/img/'
 checkpoints_folder = 'checkpoints/'
+output_folder = 'outputs/'
 
 
 # Do the evaluation on the GPU if we can, and on the CPU otherwise
@@ -63,7 +64,7 @@ def evaluate(ts):
     images_to_plot = images_to_plot / 2 + 0.5 # Unnormalize
     plt.imshow(np.transpose(images_to_plot.numpy(), (1, 2, 0)),
                nrow=5, padding=10)
-    plt.savefig(path.join(checkpoints_folder, ('%s.png' % ts.name)))
+    plt.savefig(path.join(output_folder, ('%s.png' % ts.name)))
 
 
 # Evaluate Skip + Decode
