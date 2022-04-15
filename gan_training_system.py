@@ -3,6 +3,7 @@ Defines a wrapper class responsible for creating an instance of the paper's GAN
 model, training it, and saving and loading checkpoints of it.
 """
 
+import time
 import torch
 from torch.optim import Adam
 from models import Generator, Discriminator
@@ -25,7 +26,7 @@ def gan_init(m):
         m.bias.data.fill_(0)
 
 
-class TrainingSystem:
+class GANTrainingSystem:
 
     def __init__(self, name, use_skips, use_decoders, resolution, trainloader,
                  device):
@@ -94,7 +95,8 @@ class TrainingSystem:
         self.training_time = checkpoint['training_time']
         
     def train(self, max_iteration, save_directory_path='./'):
-        model.train()
+        self.generator.train()
+        self.discriminator.train()
         start_time = time.time()
 
         while self.iterations_ran < max_iteration:
