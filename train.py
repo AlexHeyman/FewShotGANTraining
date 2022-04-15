@@ -10,6 +10,16 @@ from image_folder_dataset import ImageFolderDataset
 from gan_training_system import GANTrainingSystem
 
 
+# Resolution of input and output images (both height and width)
+# Training dataset images will be resized to match if necessary
+resolution = 256
+
+iterations_to_run = 50000
+print_losses_at_end = True
+checkpoints_folder = 'checkpoints/'
+
+
+# Do the training on the GPU if we can, and on the CPU otherwise
 device = torch.device('cpu')
 if torch.cuda.is_available():
     device = torch.device('cuda')
@@ -18,15 +28,33 @@ print('Using device: %s' % device)
 
 
 transform = transforms.Compose([
+    transforms.Resize((resolution, resolution)),
     transforms.RandomHorizontalFlip(),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
 ])
 
-trainset = ImageFolderDataset(root='./images/pokemon/img/', transform=transform)
-trainloader = DataLoader(trainset, batch_size=8, shuffle=True, num_workers=8,
-                        pin_memory=True)
+trainset = ImageFolderDataset(root='./images/AnimalFace-dog/img/',
+                              transform=transform)
+trainloader = DataLoader(trainset, batch_size=8, shuffle=True, num_workers=4,
+                         pin_memory=True)
 
 
-ts = GANTrainingSystem('test', True, True, 256, trainloader, device)
-ts.train(100)
+# Train with Skip + Decode
+ts = GANTrainingSystem('skipdecode', True, True, resolution, trainloader, device)
+ts.train(iterations_to_run, print_losses_at_end, checkpoints_folder)
+
+
+# Train with Skip alone
+ts = GANTrainingSystem('skip', True, False, resolution, trainloader, device)
+ts.train(iterations_to_run, print_losses_at_end, checkpoints_folder)
+
+
+# Train with Decode alone
+ts = GANTrainingSystem('decode', False, True, resolution, trainloader, device)
+ts.train(iterations_to_run, print_losses_at_end, checkpoints_folder)
+
+
+# Train baseline model
+ts = GANTrainingSystem('baseline', False, False, resolution, trainloader, device)
+ts.train(iterations_to_run, print_losses_at_end, checkpoints_folder)

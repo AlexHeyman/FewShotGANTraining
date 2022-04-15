@@ -45,7 +45,7 @@ class Upsampler(nn.Module):
         self.conv = nn.Conv2d(in_channels, out_channels * 2,
                               kernel_size=3, stride=1, padding=1)
         self.batchnorm = nn.BatchNorm2d(out_channels * 2)
-        self.glu = nn.GLU() # cuts number of channels in half
+        self.glu = nn.GLU(dim=1) # cuts number of channels in half
 
     def forward(self, x):
         # x must have shape ([batch_size], in_channels, [height], [width])
@@ -70,7 +70,7 @@ class Generator(nn.Module):
         self.conv_transpose = nn.ConvTranspose2d(256, 2048, kernel_size=4,
                                                  stride=1, padding=0)
         self.batchnorm = nn.BatchNorm2d(2048)
-        self.glu = nn.GLU() # cuts number of channels in half
+        self.glu = nn.GLU(dim=1) # cuts number of channels in half
         self.upsampler_4 = Upsampler(1024, 512)
         self.upsampler_8 = Upsampler(512, 256)
         self.upsampler_16 = Upsampler(256, 128)
@@ -91,6 +91,7 @@ class Generator(nn.Module):
         # x is a set of random noise vectors with shape ([batch_size], 256)
         # output is a set of images with shape
         # ([batch_size], 3, output_resolution, output_resolution)
+        x = torch.reshape(x, (-1, 256, 1, 1))
         x_4 = self.glu(self.batchnorm(self.conv_transpose(x)))
         x_8 = self.upsampler_4(x_4)
         x_16 = self.upsampler_8(x_8)
@@ -165,7 +166,7 @@ class ResidualDownsampler(nn.Module):
     def forward(self, x):
         # x must have shape ([batch_size], in_channels, [height], [width])
         # output has shape ([batch_size], out_channels, [height/2], [width/2])
-        x1 = self.nonlinear1(self.batchnorm1(self.conv1(x)))
+        x1 = self.nonlinear1(self.batchnorm1(self.conv1(self.pooling(x))))
         x2 = self.nonlinear2(self.batchnorm2(self.conv2(x)))
         x3 = self.nonlinear3(self.batchnorm3(self.conv3(x2)))
         return x1 + x3
@@ -190,10 +191,10 @@ class Discriminator(nn.Module):
         self.conv2 = nn.Conv2d(early_conv_filters, early_conv_filters,
                                kernel_size=4, stride=early_conv_stride,
                                padding='same')
-        self.batchnorm2 = nn.BatchNorm2d(32)
+        self.batchnorm2 = nn.BatchNorm2d(early_conv_filters)
         self.nonlinear2 = nn.LeakyReLU(negative_slope=0.1)
         
-        self.downsampler_256 = ResidualDownsampler(32, 64)
+        self.downsampler_256 = ResidualDownsampler(early_conv_filters, 64)
         self.downsampler_128 = ResidualDownsampler(64, 128)
         self.downsampler_64 = ResidualDownsampler(128, 128)
         self.downsampler_32 = ResidualDownsampler(128, 256)
@@ -247,7 +248,7 @@ class Discriminator(nn.Module):
                 x_16_part = x_16[:, :, 8:, 8:]
 
             I_prime = self.decoder2(x_8)
-            I_part_prime = self.decoder1(x_16)
+            I_part_prime = self.decoder1(x_16_part)
             
             return logits, I, I_part, I_prime, I_part_prime
         else:

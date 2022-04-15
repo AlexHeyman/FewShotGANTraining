@@ -3,6 +3,7 @@ Defines a wrapper class responsible for creating an instance of the paper's GAN
 model, training it, and saving and loading checkpoints of it.
 """
 
+from os import path
 import time
 import torch
 from torch.optim import Adam
@@ -35,6 +36,7 @@ class GANTrainingSystem:
         self.use_decoders = use_decoders
         self.resolution = resolution
         self.trainloader = trainloader
+        self.device = device
 
         self.learning_rate = 0.0002
         self.adam_betas = (0.5, 0.999)
@@ -94,7 +96,12 @@ class GANTrainingSystem:
         self.running_reconstruction_loss = checkpoint['running_reconstruction_loss']
         self.training_time = checkpoint['training_time']
         
-    def train(self, max_iteration, save_directory_path='./'):
+    def train(self, max_iteration, print_losses_at_end, save_directory_path='./'):
+        if print_losses_at_end:
+            gen_losses = []
+            disc_losses = []
+            recon_losses = []
+
         self.generator.train()
         self.discriminator.train()
         start_time = time.time()
@@ -103,13 +110,16 @@ class GANTrainingSystem:
             for real_images in self.trainloader:
                 if self.iterations_ran % self.save_every == 0:
                     self.training_time += (time.time() - start_time)
+                    
                     print('Training time up to iteration %d: %.3f seconds'\
                           % (self.iterations_ran, self.training_time))
                     self.save_checkpoint(directory_path=save_directory_path)
+                    
                     start_time = time.time()
                 
-                real_images = real_images.to(device)
-                noise = torch.Tensor(len(real_images), 256).normal_(0, 1).to(device)
+                real_images = real_images.to(self.device)
+                noise = torch.Tensor(len(real_images), 256).normal_(0, 1)\
+                        .to(self.device)
                 fake_images = self.generator(noise)
 
                 # Discriminator optimization step
@@ -120,12 +130,12 @@ class GANTrainingSystem:
                             = self.discriminator(real_images, label=1)
                     loss_r = self.reconstruction_loss(I, I_prime)\
                              + self.reconstruction_loss(I_part, I_part_prime)
-                    loss_r.backward()
+                    loss_r.backward(retain_graph=True)
                 else:
                     real_logits = self.discriminator(real_images, label=1)
                     loss_r = torch.Tensor([0])
 
-                fake_logits = self.discriminator(fake_images, label=0)
+                fake_logits = self.discriminator(fake_images.detach(), label=0)
 
                 loss_d = self.disc_loss(real_logits, fake_logits)
                 loss_d.backward()
@@ -142,14 +152,24 @@ class GANTrainingSystem:
                 self.running_generator_loss += loss_g.item()
                 self.running_discriminator_loss += loss_d.item()
                 self.running_reconstruction_loss += loss_r.item()
-                if self.iterations_ran % print_every == (print_every - 1):
+                if self.iterations_ran % self.print_every == (self.print_every - 1):
                     self.training_time += (time.time() - start_time)
 
+                    self.running_generator_loss /= self.print_every
+                    self.running_discriminator_loss /= self.print_every
+                    self.running_reconstruction_loss /= self.print_every
+                    
                     print('Iteration %d losses: %.3f %.3f %.3f' %
                           (self.iterations_ran + 1,
-                           self.running_generator_loss / print_every,
-                           self.running_discriminator_loss / print_every,
-                           self.running_reconstruction_loss / print_every))
+                           self.running_generator_loss,
+                           self.running_discriminator_loss,
+                           self.running_reconstruction_loss))
+                    
+                    if print_losses_at_end:
+                        gen_losses.append(self.running_generator_loss)
+                        disc_losses.append(self.running_discriminator_loss)
+                        recon_losses.append(self.running_reconstruction_loss)
+                    
                     self.running_generator_loss = 0
                     self.running_discriminator_loss = 0
                     self.running_reconstruction_loss = 0
@@ -166,3 +186,8 @@ class GANTrainingSystem:
                         % (self.iterations_ran, self.training_time))
         if self.iterations_ran % self.save_every == 0:
             self.save_checkpoint(directory_path=save_directory_path)
+
+        if print_losses_at_end:
+            print('Generator losses:', gen_losses)
+            print('Discriminator losses:', disc_losses)
+            print('Reconstruction losses:', recon_losses)
