@@ -40,8 +40,8 @@ class GANTrainingSystem:
 
         self.learning_rate = 0.0002
         self.adam_betas = (0.5, 0.999)
-        self.save_every = 1000
-        self.print_every = 1000
+        self.save_every = 1000 # Save a checkpoint every [this many] iterations
+        self.print_every = 1000 # Print losses every [this many] iterations
         
         self.generator = Generator(use_skips, resolution).to(device)
         self.generator.apply(gan_init)
@@ -108,6 +108,7 @@ class GANTrainingSystem:
 
         while self.iterations_ran < max_iteration:
             for real_images in self.trainloader:
+                # Save a checkpoint periodically
                 if self.iterations_ran % self.save_every == 0:
                     self.training_time += (time.time() - start_time)
                     
@@ -118,6 +119,9 @@ class GANTrainingSystem:
                     start_time = time.time()
                 
                 real_images = real_images.to(self.device)
+
+                # Make the generator generate a batch of fake images from
+                # random noise
                 noise = torch.Tensor(len(real_images), 256).normal_(0, 1)\
                         .to(self.device)
                 fake_images = self.generator(noise)
@@ -148,10 +152,11 @@ class GANTrainingSystem:
                 loss_g.backward()
                 self.gen_opt.step()
 
-                # Print running losses
+                # Accumulate running losses
                 self.running_generator_loss += loss_g.item()
                 self.running_discriminator_loss += loss_d.item()
                 self.running_reconstruction_loss += loss_r.item()
+                # Print running losses
                 if self.iterations_ran % self.print_every == (self.print_every - 1):
                     self.training_time += (time.time() - start_time)
 
