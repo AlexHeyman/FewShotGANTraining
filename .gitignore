@@ -133,3 +133,6 @@ images/
 
 # Model checkpoints
 checkpoints/
+
+# Evaluation outputs
+outputs/

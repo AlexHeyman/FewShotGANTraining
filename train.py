@@ -16,6 +16,7 @@ resolution = 256
 
 iterations_to_run = 50000
 print_losses_at_end = True
+dataset_folder = './images/AnimalFace-dog/img/'
 checkpoints_folder = 'checkpoints/'
 
 
@@ -34,8 +35,7 @@ transform = transforms.Compose([
     transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
 ])
 
-trainset = ImageFolderDataset(root='./images/AnimalFace-dog/img/',
-                              transform=transform)
+trainset = ImageFolderDataset(root=dataset_folder, transform=transform)
 trainloader = DataLoader(trainset, batch_size=8, shuffle=True, num_workers=4,
                          pin_memory=True)
 
