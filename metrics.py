@@ -19,8 +19,8 @@ def FID(images1, images2):
     mean1 = torch.mean(images1, dim=0)
     mean2 = torch.mean(images2, dim=0)
 
-    cov1 = torch.cov(images1)
-    cov2 = torch.cov(images2)
+    cov1 = torch.cov(images1.T)
+    cov2 = torch.cov(images2.T)
 
     d_squared = torch.square(torch.dist(mean1, mean2, p=2))\
                 + torch.trace(cov1 + cov2\

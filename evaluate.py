@@ -4,6 +4,7 @@ paper's GAN model.
 """
 
 from os import path
+import numpy as np
 import torch
 from torch.utils.data.dataloader import DataLoader
 from torchvision import transforms
@@ -11,7 +12,10 @@ from torchvision.utils import make_grid
 import matplotlib.pyplot as plt
 from image_folder_dataset import ImageFolderDataset
 from gan_training_system import GANTrainingSystem
-from metrics import FID
+# Turns out our relatively naive FID implementation is computationally
+# intractable on all but the smallest images, and we don't have enough time to
+# write a better one, so we're just not going to use that metric
+# from metrics import FID
 
 
 # Resolution of input and output images (both height and width)
@@ -19,14 +23,16 @@ from metrics import FID
 resolution = 256
 
 iteration_to_eval = 50000
-images_to_generate = 5000
+images_to_generate = 25
 dataset_folder = './images/AnimalFace-dog/img/'
 checkpoints_folder = 'checkpoints/'
 output_folder = 'outputs/'
+image_save_dpi = 200
 
 
 # Do the evaluation on the GPU if we can, and on the CPU otherwise
-device = torch.device('cpu')
+cpu = torch.device('cpu')
+device = cpu
 if torch.cuda.is_available():
     device = torch.device('cuda')
 
@@ -49,7 +55,7 @@ eval_images = torch.concat([image for image in eval_loader], dim=0)
 noise = torch.Tensor(images_to_generate, 256).normal_(0, 1).to(device)
 
 # Create a view of the noise tensor as a list of row vectors so they can be
-# fed into a GAN's generator one at a time, prevening out-of-memory errors
+# fed into a GAN's generator one at a time, preventing out-of-memory errors
 noise_segments = [torch.reshape(noise[i], (1, 256))
                   for i in range(images_to_generate)]
 
@@ -58,19 +64,20 @@ def evaluate(ts):
     ts.load_checkpoint(directory_path=checkpoints_folder,
                        filename=('%s_%d.pt' % (ts.name, iteration_to_eval)))
     
-    fake_images = torch.concat([ts.generator(noise_segments[i])
+    fake_images = torch.concat([ts.generator(noise_segments[i]).to(cpu)
                                 for i in range(images_to_generate)], dim=0)
 
     # Calculate FID between generated images and original dataset
-    fid = FID(fake_images, eval_images)
-    print('%s FID: %f' % (ts.name, fid.item()))
+    # fid = FID(fake_images, eval_images)
+    # print('%s FID: %f' % (ts.name, fid.item()))
 
     # Plot 25 of the generated images in a 5x5 grid
     images_to_plot = torch.clone(fake_images[0:25])
     images_to_plot = images_to_plot / 2 + 0.5 # Unnormalize
-    plt.imshow(np.transpose(images_to_plot.numpy(), (1, 2, 0)),
-               nrow=5, padding=10)
-    plt.savefig(path.join(output_folder, ('samples_%s.png' % ts.name)))
+    plt.imshow(np.transpose(make_grid(
+        images_to_plot, nrow=5, padding=10).numpy(), (1, 2, 0)))
+    plt.savefig(path.join(output_folder, ('samples_%s.png' % ts.name)),
+                dpi=image_save_dpi)
 
 
 # Evaluate Skip + Decode
